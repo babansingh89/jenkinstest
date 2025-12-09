@@ -1,0 +1,40 @@
+name: Deploy to IIS
+
+on:
+  push:
+    branches:
+      - main   # or master
+
+jobs:
+  build-and-deploy:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v1.3.1
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v1
+
+      - name: Restore NuGet packages
+        run: nuget restore YourProject.sln
+
+      - name: Build and Publish
+        run: |
+          msbuild YourProject.sln /p:Configuration=Release /p:DeployOnBuild=true /p:PublishProfile=FolderProfile
+
+      - name: Zip Published Output
+        run: Compress-Archive -Path C:\PublishOutput\* -DestinationPath publish.zip -Force
+
+      - name: Copy to IIS Server (WinRM)
+        uses: dannyben/psremoting@v1
+        with:
+          target: ${{ secrets.WINDOWS_SERVER_HOST }}
+          username: ${{ secrets.WINDOWS_SERVER_USERNAME }}
+          password: ${{ secrets.WINDOWS_SERVER_PASSWORD }}
+          script: |
+            Expand-Archive -Path publish.zip -DestinationPath "C:\inetpub\wwwroot\MyApp" -Force
+            Restart-WebAppPool -Name "MyAppPool"
